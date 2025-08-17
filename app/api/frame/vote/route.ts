@@ -1,39 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// Mock database - use real database in production
-const polls: any = {}
+import { pollStorage } from '@/app/lib/pollStorage'
 
 export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const pollId = searchParams.get('id')
   
-  if (!pollId || !polls[pollId]) {
+  if (!pollId) {
+    return new NextResponse('Poll ID required', { status: 400 })
+  }
+
+  const poll = pollStorage.getPoll(pollId)
+  if (!poll) {
     return new NextResponse('Poll not found', { status: 404 })
   }
 
   try {
     const body = await request.json()
     const buttonIndex = body.untrustedData?.buttonIndex
-    const fid = body.untrustedData?.fid // Farcaster user ID
+    const fid = body.untrustedData?.fid || 'anonymous' // Farcaster user ID
     
-    if (!buttonIndex || buttonIndex < 1 || buttonIndex > polls[pollId].options.length) {
+    if (!buttonIndex || buttonIndex < 1 || buttonIndex > poll.options.length) {
       return new NextResponse('Invalid vote', { status: 400 })
     }
 
-    const poll = polls[pollId]
-    
-    // Check if user already voted (prevent double voting)
-    if (poll.voters.has(fid)) {
-      // Return results frame for users who already voted
+    // Check if user already voted
+    const alreadyVoted = pollStorage.hasVoted(pollId, fid)
+    if (alreadyVoted) {
       return generateResultsFrame(poll, pollId, true)
     }
 
-    // Record the vote
-    poll.votes[buttonIndex - 1]++
-    poll.voters.add(fid)
+    // Record the vote (buttonIndex is 1-based, array is 0-based)
+    const success = pollStorage.addVote(pollId, buttonIndex - 1, fid)
+    if (!success) {
+      return new NextResponse('Failed to record vote', { status: 500 })
+    }
+
+    // Get updated poll data
+    const updatedPoll = pollStorage.getPoll(pollId)!
     
     // Return results frame
-    return generateResultsFrame(poll, pollId, false)
+    return generateResultsFrame(updatedPoll, pollId, false)
     
   } catch (error) {
     console.error('Vote error:', error)

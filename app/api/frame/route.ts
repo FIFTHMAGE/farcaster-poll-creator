@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// This would be your database in production
-const polls: any = {}
+import { pollStorage } from '@/app/lib/pollStorage'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const pollId = searchParams.get('id')
   
-  if (!pollId || !polls[pollId]) {
-    return new NextResponse('Poll not found', { status: 404 })
+  if (!pollId) {
+    return new NextResponse('Poll ID required', { status: 400 })
   }
 
-  const poll = polls[pollId]
+  const poll = pollStorage.getPoll(pollId)
+  if (!poll) {
+    return new NextResponse('Poll not found', { status: 404 })
+  }
   
   // Generate the frame HTML
   const frameHtml = `
@@ -48,30 +49,39 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
-  const { question, options, template, isPremium } = body
-  
-  // Generate unique poll ID
-  const pollId = Math.random().toString(36).substring(2, 15)
-  
-  // Store poll (in production, use a real database)
-  polls[pollId] = {
-    id: pollId,
-    question,
-    options,
-    template,
-    isPremium,
-    votes: new Array(options.length).fill(0),
-    voters: new Set(),
-    createdAt: new Date().toISOString()
+  try {
+    const body = await request.json()
+    const { question, options, template, isPremium } = body
+    
+    // Validate input
+    if (!question || !options || !Array.isArray(options) || options.length < 2) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Invalid poll data' 
+      }, { status: 400 })
+    }
+
+    // Create poll
+    const poll = pollStorage.createPoll({
+      question,
+      options,
+      template: template || 'gradient-purple',
+      isPremium: isPremium || false
+    })
+    
+    const frameUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/frame?id=${poll.id}`
+    
+    return NextResponse.json({ 
+      success: true, 
+      pollId: poll.id,
+      frameUrl,
+      shareUrl: frameUrl
+    })
+  } catch (error) {
+    console.error('Error creating poll:', error)
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Failed to create poll' 
+    }, { status: 500 })
   }
-  
-  const frameUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/frame?id=${pollId}`
-  
-  return NextResponse.json({ 
-    success: true, 
-    pollId,
-    frameUrl,
-    shareUrl: frameUrl
-  })
 }

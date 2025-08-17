@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// Mock database
-const polls: any = {}
+import { pollStorage } from '@/app/lib/pollStorage'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const pollId = searchParams.get('id')
   
-  if (!pollId || !polls[pollId]) {
-    return new NextResponse('Poll not found', { status: 404 })
+  if (!pollId) {
+    return new NextResponse('Poll ID required', { status: 400 })
   }
 
-  const poll = polls[pollId]
+  const poll = pollStorage.getPoll(pollId)
+  if (!poll) {
+    return new NextResponse('Poll not found', { status: 404 })
+  }
   const totalVotes = poll.votes.reduce((a: number, b: number) => a + b, 0)
   
   // Generate SVG image for poll results

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-// Mock database for payments
-const payments: any = {}
+import { pollStorage } from '@/app/lib/pollStorage'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -44,27 +42,38 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
-  const { plan, amount, userFid } = body
-  
-  // Generate unique payment ID
-  const paymentId = Math.random().toString(36).substring(2, 15)
-  
-  // Store payment request
-  payments[paymentId] = {
-    id: paymentId,
-    plan,
-    amount: parseFloat(amount),
-    userFid,
-    status: 'pending',
-    createdAt: new Date().toISOString()
+  try {
+    const body = await request.json()
+    const { plan, amount, userFid } = body
+    
+    // Validate input
+    if (!plan || !amount) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Missing plan or amount' 
+      }, { status: 400 })
+    }
+
+    // Create payment request
+    const payment = pollStorage.createPayment({
+      plan,
+      amount: parseFloat(amount),
+      userFid: userFid || 'anonymous',
+      status: 'pending'
+    })
+    
+    const paymentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment?id=${payment.id}&plan=${plan}&amount=${amount}`
+    
+    return NextResponse.json({ 
+      success: true, 
+      paymentId: payment.id,
+      paymentUrl
+    })
+  } catch (error) {
+    console.error('Error creating payment:', error)
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Failed to create payment' 
+    }, { status: 500 })
   }
-  
-  const paymentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment?id=${paymentId}&plan=${plan}&amount=${amount}`
-  
-  return NextResponse.json({ 
-    success: true, 
-    paymentId,
-    paymentUrl
-  })
 }
