@@ -3,8 +3,17 @@
 @tailwind utilities;
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
   html {
     font-family: system-ui, sans-serif;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
   }
 }
 
